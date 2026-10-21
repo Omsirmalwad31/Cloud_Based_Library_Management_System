@@ -136,6 +136,24 @@ For production, set:
 - `SPRING_DATASOURCE_PASSWORD`
 - `JWT_SECRET` (minimum 32 bytes)
 
+Before starting a production deployment with the new reservation and renewal
+features, back up the database and apply
+[`backend/src/main/resources/db/manual/upgrade-prod-schema.sql`](backend/src/main/resources/db/manual/upgrade-prod-schema.sql)
+to the production PostgreSQL database. The production profile validates the
+schema and does not apply changes automatically.
+
+## Library features
+
+- Members can search books, borrow and return copies, see due dates and
+  calculated overdue fines, and renew an eligible loan once for 14 days.
+- Members can join a first-in/first-out reservation queue for unavailable
+  books. When a copy is returned, the next member can claim it or cancel their
+  reservation.
+- Admins and librarians can view all loans and reservation queues, record
+  returns, and edit book details and copy totals. Admins can also archive books
+  without erasing loan history.
+- Copy totals cannot be reduced below the number currently borrowed.
+
 ---
 
 ## Development notes
@@ -148,4 +166,5 @@ This project is structured as a combined monorepo with:
 - `helm/` for Kubernetes deployments
 - `monitoring/` and `jmeter/` for observability and load testing
 
-The application includes JWT-based authentication, book search, issue/return flow, loan history, admin operations, and cloud-ready deployment support.
+The application is structured as a combined monorepo for local development and
+cloud deployment.

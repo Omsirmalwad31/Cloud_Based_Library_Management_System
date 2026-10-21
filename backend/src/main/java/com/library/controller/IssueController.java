@@ -27,6 +27,12 @@ public class IssueController {
         return issueService.myLoans(authentication.getName());
     }
 
+    @GetMapping
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
+    public List<LoanResponse> allLoans() {
+        return issueService.allLoans();
+    }
+
     @PostMapping("/{bookId}")
     public LoanResponse issue(@PathVariable Long bookId, Authentication authentication) {
         return issueService.issue(bookId, authentication.getName());
@@ -38,5 +44,10 @@ public class IssueController {
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN")
                         || authority.getAuthority().equals("ROLE_LIBRARIAN"));
         return issueService.returnBook(loanId, authentication.getName(), librarian);
+    }
+
+    @PutMapping("/{loanId}/renew")
+    public LoanResponse renew(@PathVariable Long loanId, Authentication authentication) {
+        return issueService.renew(loanId, authentication.getName());
     }
 }

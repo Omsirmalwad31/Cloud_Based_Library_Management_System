@@ -33,6 +33,9 @@ public class IssueRecord {
     @Column(nullable = false)
     private LocalDate dueDate;
 
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int renewalsUsed;
+
     private LocalDate returnDate;
 
     protected IssueRecord() {
@@ -65,11 +68,20 @@ public class IssueRecord {
         return dueDate;
     }
 
+    public int getRenewalsUsed() {
+        return renewalsUsed;
+    }
+
     public LocalDate getReturnDate() {
         return returnDate;
     }
 
     public void markReturned(LocalDate date) {
         this.returnDate = date;
+    }
+
+    public void renew(int durationDays) {
+        dueDate = dueDate.plusDays(durationDays);
+        renewalsUsed++;
     }
 }

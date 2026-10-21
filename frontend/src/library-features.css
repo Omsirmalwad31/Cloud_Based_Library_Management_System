@@ -1,0 +1,10 @@
+.loan-actions{display:flex;gap:7px}
+.book-edit-form{display:grid;gap:7px;margin-top:9px}
+.book-edit-form input{width:100%;min-width:0;border:1px solid var(--line);padding:7px 8px;font-size:10px}
+.book-edit-form label{display:grid;gap:4px;font-size:10px;color:var(--muted)}
+.book-edit-form .button{width:100%}
+.staff-loan-row .loan-copy{min-width:170px}
+.staff-reservations{margin-top:22px;padding:15px;background:#f0f2ec}
+.staff-reservations h3{font:500 16px "Playfair Display",serif;margin:0 0 10px}
+.staff-reservations p{font-size:11px;color:var(--muted);margin:7px 0}
+@media(max-width:680px){.loan-row{flex-wrap:wrap;padding:10px 0}.staff-loan-row .loan-copy{flex-basis:calc(100% - 50px)}.staff-loan-row .loan-fine{margin-left:46px}.loan-actions{margin-left:auto}}

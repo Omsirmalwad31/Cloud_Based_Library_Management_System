@@ -32,6 +32,9 @@ public class Book {
     @Column(nullable = false)
     private int availableCopies;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean deleted;
+
     protected Book() {
     }
 
@@ -70,6 +73,27 @@ public class Book {
 
     public int getAvailableCopies() {
         return availableCopies;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void markDeleted() {
+        deleted = true;
+    }
+
+    public void updateDetails(String title, String author, String isbn, String category, int copies) {
+        int checkedOutCopies = totalCopies - availableCopies;
+        if (copies < checkedOutCopies) {
+            throw new IllegalArgumentException("Total copies cannot be less than the number currently borrowed");
+        }
+        this.title = title;
+        this.author = author;
+        this.isbn = isbn;
+        this.category = category;
+        this.totalCopies = copies;
+        this.availableCopies = copies - checkedOutCopies;
     }
 
     public void checkOutCopy() {
