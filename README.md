@@ -1,33 +1,80 @@
-# Folio Library
+﻿# Cloud-Based Online Library System
 
-This is the first runnable version of the library system: React frontend, Spring
-Boot REST API, Spring Security JWT authentication, and PostgreSQL storage.
+A cloud-hosted, containerized library management system for managing books, borrowing records, user roles, and deployment automation.
+
+**Team:** Mrunal Nalawade (2025510043), Somesh Kate (2025510032), Omkumar Sirmalwad (2025510061)
+
+---
 
 ## Project structure
 
-- `backend/` contains the Spring Boot API, Maven wrapper, and backend container files.
-- `frontend/` contains the React application.
-- `helm/`, `terraform/`, `monitoring/`, and `jmeter/` contain deployment,
-  infrastructure, observability, and load-test resources.
+```text
+library-project/
+├── README.md
+├── docker-compose.yml
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml
+├── backend/
+│   ├── .dockerignore
+│   ├── .mvn/
+│   ├── Dockerfile
+│   ├── mvnw
+│   ├── mvnw.cmd
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/com/library/
+│       ├── main/resources/
+│       └── test/java/com/library/
+├── frontend/
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── package.json
+│   ├── vite.config.js
+│   └── src/
+├── helm/
+│   └── library-backend/
+├── monitoring/
+├── jmeter/
+├── terraform/
+├── target/
+├── .gitattributes
+├── .gitignore
+├── .dockerignore
+└── .mvn/
+```
+
+---
+
+## Tech stack
+
+- Frontend: React.js
+- Backend: Java, Spring Boot, Spring Security
+- Database: PostgreSQL
+- Cloud: AWS EC2, VPC, IAM, S3, RDS
+- Containerization: Docker, Docker Compose
+- Orchestration: Kubernetes, Helm, Minikube
+- CI/CD: GitHub Actions, Terraform
+- Monitoring: Prometheus, Grafana, Spring Boot Actuator
+
+---
 
 ## Local setup
 
-The backend uses the `dev` profile and connects to PostgreSQL at
-`jdbc:postgresql://localhost:5432/librarydb` as `postgres`. Create the database
-first if it does not exist. Schema updates and demo data are enabled only in the
-development profile. Run backend commands from the `backend/` directory.
+### Backend
 
-In one terminal:
+The backend uses the `dev` profile and PostgreSQL at `jdbc:postgresql://localhost:5432/librarydb`.
+
+From the project root:
 
 ```powershell
+cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-The API runs at `http://localhost:8081` by default. Set `SERVER_PORT` to override
-the port. Database settings can be overridden with `DB_URL`, `DB_USERNAME`, and
-`DB_PASSWORD`.
+The API runs on `http://localhost:8081` by default.
 
-In another terminal:
+### Frontend
 
 ```powershell
 cd frontend
@@ -35,21 +82,30 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Development accounts:
+Open `http://localhost:5173`.
 
-| Role | Email | Password |
-|---|---|---|
-| Student | `student@library.local` | `library123` |
-| Admin | `admin@library.local` | `library123` |
-
-The first version supports signing in, searching books, borrowing and returning
-books, viewing loan history, calculating overdue fines at ₹5 per day, and adding
-books as an admin.
+---
 
 ## Production configuration
 
-For production, set `SPRING_PROFILES_ACTIVE=prod` and provide
-`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and
-`SPRING_DATASOURCE_PASSWORD`, plus a `JWT_SECRET` of at least 32 bytes. The
-production profile validates the existing schema instead of changing it. Do not
-use the development JWT secret or demo accounts in production.
+For production, set:
+
+- `SPRING_PROFILES_ACTIVE=prod`
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `JWT_SECRET` (minimum 32 bytes)
+
+---
+
+## Development notes
+
+This project is structured as a combined monorepo with:
+
+- `backend/` for the Spring Boot REST API
+- `frontend/` for the React UI
+- `terraform/` for cloud infrastructure
+- `helm/` for Kubernetes deployments
+- `monitoring/` and `jmeter/` for observability and load testing
+
+The application includes JWT-based authentication, book search, issue/return flow, loan history, admin operations, and cloud-ready deployment support.
