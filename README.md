@@ -61,11 +61,35 @@ library-project/
 
 ## Local setup
 
-### Backend
+Start the database, backend, and frontend in separate PowerShell terminals. Run
+the commands from the project root unless noted otherwise.
 
-The backend uses the `dev` profile and PostgreSQL at `jdbc:postgresql://localhost:5432/librarydb`.
+### 1. PostgreSQL database
 
-From the project root:
+The backend dev profile connects to `jdbc:postgresql://localhost:5432/librarydb`
+as user `postgres`. Make sure the PostgreSQL Windows service is running:
+
+```powershell
+Get-Service *postgres*
+Start-Service postgresql-x64-18
+```
+
+If the service is already running, skip `Start-Service`. If needed, run
+PowerShell as Administrator to start it. Create the database once if it does
+not already exist:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\createdb.exe" -U postgres librarydb
+```
+
+The dev profile reads optional overrides from `DB_URL`, `DB_USERNAME`, and
+`DB_PASSWORD`; defaults are the URL above, `postgres`, and an empty password.
+Set `DB_PASSWORD` in the backend terminal if your PostgreSQL user has a
+password.
+
+### 2. Backend
+
+In a second terminal:
 
 ```powershell
 cd backend
@@ -74,7 +98,23 @@ cd backend
 
 The API runs on `http://localhost:8081` by default.
 
-### Frontend
+The dev profile creates/updates the schema and inserts demo data. To verify the
+database connection, run this from another terminal:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h localhost -U postgres -d librarydb -c "SELECT count(*) FROM books;"
+```
+
+To run the backend test:
+
+```powershell
+cd backend
+.\mvnw.cmd test
+```
+
+### 3. Frontend
+
+In a third terminal:
 
 ```powershell
 cd frontend
