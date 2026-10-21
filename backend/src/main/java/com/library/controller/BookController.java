@@ -1,0 +1,38 @@
+package com.library.controller;
+
+import java.util.List;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.library.dto.request.BookRequest;
+import com.library.dto.response.BookResponse;
+import com.library.service.BookService;
+
+import jakarta.validation.Valid;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+    private final BookService bookService;
+
+    public BookController(BookService bookService) {
+        this.bookService = bookService;
+    }
+
+    @GetMapping
+    public List<BookResponse> search(@RequestParam(defaultValue = "") String search) {
+        return bookService.search(search);
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'LIBRARIAN')")
+    public BookResponse add(@Valid @RequestBody BookRequest request) {
+        return bookService.add(request);
+    }
+}

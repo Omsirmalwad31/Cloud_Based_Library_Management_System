@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: library-backend
+  profiles:
+    default: dev
