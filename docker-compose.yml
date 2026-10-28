@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: librarydb
-      POSTGRES_USER: library
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-library-local-password}
+      POSTGRES_DB: Library
+      POSTGRES_USER: lib
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lib123}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U library -d librarydb"]
+      test: ["CMD-SHELL", "pg_isready -U lib -d Library"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -18,9 +18,9 @@ services:
       context: ./backend
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/librarydb
-      SPRING_DATASOURCE_USERNAME: library
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-library-local-password}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/Library
+      SPRING_DATASOURCE_USERNAME: lib
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-lib123}
       JWT_SECRET: ${JWT_SECRET:-local-compose-secret-at-least-32-characters-long}
       SERVER_PORT: 8081
     depends_on:

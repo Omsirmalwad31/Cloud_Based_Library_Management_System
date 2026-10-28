@@ -25,6 +25,24 @@ jobs:
   gate1-build-test:
     name: Gate 1 - build, test and scan
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: Library
+          POSTGRES_USER: lib
+          POSTGRES_PASSWORD: lib123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lib -d Library"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/Library
+      SPRING_DATASOURCE_USERNAME: lib
+      SPRING_DATASOURCE_PASSWORD: lib123
     steps:
       - uses: actions/checkout@v5
 
