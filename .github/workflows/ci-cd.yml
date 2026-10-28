@@ -1,0 +1,304 @@
+name: CI/CD quality gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: library-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-south-1
+  BACKEND_IMAGE: library-backend
+  FRONTEND_IMAGE: library-frontend
+  HELM_RELEASE: library
+
+jobs:
+  gate1-build-test:
+    name: Gate 1 - build, test and scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          chmod +x mvnw
+          ./mvnw --batch-mode --no-transfer-progress verify
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - name: Validate Terraform
+        working-directory: terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Lint Helm chart
+        run: helm lint helm/library-backend
+
+      - name: Scan source for vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-source.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload source scan
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-source.sarif
+
+  gate2-docker-ecr:
+    name: Gate 2 - build, scan and publish
+    needs: gate1-build-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      backend-uri: ${{ steps.image.outputs.backend-uri }}
+      frontend-uri: ${{ steps.image.outputs.frontend-uri }}
+      image-tag: ${{ steps.image.outputs.image-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          load: true
+          tags: local/library-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          load: true
+          tags: local/library-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: local/library-backend:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: local/library-frontend:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Export and push images
+        id: image
+        shell: bash
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          BACKEND_URI="$ECR_REGISTRY/$BACKEND_IMAGE"
+          FRONTEND_URI="$ECR_REGISTRY/$FRONTEND_IMAGE"
+          docker tag local/library-backend:${{ github.sha }} "$BACKEND_URI:${{ github.sha }}"
+          docker tag local/library-backend:${{ github.sha }} "$BACKEND_URI:latest"
+          docker tag local/library-frontend:${{ github.sha }} "$FRONTEND_URI:${{ github.sha }}"
+          docker tag local/library-frontend:${{ github.sha }} "$FRONTEND_URI:latest"
+          docker push "$BACKEND_URI:${{ github.sha }}"
+          docker push "$BACKEND_URI:latest"
+          docker push "$FRONTEND_URI:${{ github.sha }}"
+          docker push "$FRONTEND_URI:latest"
+          echo "backend-uri=$BACKEND_URI" >> "$GITHUB_OUTPUT"
+          echo "frontend-uri=$FRONTEND_URI" >> "$GITHUB_OUTPUT"
+          echo "image-tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+  gate3-deploy-monitor:
+    name: Gate 3 - deploy, health and monitor
+    needs: gate2-docker-ecr
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_URI: ${{ needs.gate2-docker-ecr.outputs.backend-uri }}
+      FRONTEND_URI: ${{ needs.gate2-docker-ecr.outputs.frontend-uri }}
+      IMAGE_TAG: ${{ needs.gate2-docker-ecr.outputs.image-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy with Helm and wait for health
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" \
+            "rm -rf /tmp/library-pipeline && mkdir -p /tmp/library-pipeline"
+          tar -czf - -C helm library-backend |
+            ssh -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" \
+              'tar -xzf - -C /tmp/library-pipeline'
+          ssh -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" \
+            'AWS_REGION='"$AWS_REGION"' ECR_REGISTRY='"$ECR_REGISTRY"' \
+             BACKEND_URI='"$BACKEND_URI"' FRONTEND_URI='"$FRONTEND_URI"' IMAGE_TAG='"$IMAGE_TAG"' \
+             DB_URL='"$DB_URL"' DB_USERNAME='"$DB_USERNAME"' DB_PASSWORD='"$DB_PASSWORD"' JWT_SECRET='"$JWT_SECRET"' bash -s' <<'REMOTE'
+          set -euo pipefail
+          aws ecr get-login-password --region "$AWS_REGION" |
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          token=$(aws ecr get-login-password --region "$AWS_REGION")
+          kubectl create namespace library --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n library create secret docker-registry ecr-secret \
+            --docker-server="$ECR_REGISTRY" --docker-username=AWS \
+            --docker-password="$token" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n library create secret generic db-secret \
+            --from-literal=url="$DB_URL" --from-literal=username="$DB_USERNAME" \
+            --from-literal=password="$DB_PASSWORD" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n library create secret generic jwt-secret \
+            --from-literal=secret="$JWT_SECRET" --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade --install "$HELM_RELEASE" /tmp/library-pipeline/library-backend \
+            --namespace library --atomic --wait --timeout 10m \
+            --set backend.image.repository="$BACKEND_URI" \
+            --set backend.image.tag="$IMAGE_TAG" \
+            --set frontend.image.repository="$FRONTEND_URI" \
+            --set frontend.image.tag="$IMAGE_TAG" \
+            --set imagePullSecrets[0].name=ecr-secret
+          kubectl -n library rollout status deploy/backend --timeout=5m
+          kubectl -n library rollout status deploy/frontend --timeout=5m
+          REMOTE
+
+      - name: Verify backend health
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" '
+            set -e
+            kubectl -n library port-forward svc/backend 18080:8080 >/tmp/library-port-forward.log 2>&1 &
+            pf=$!
+            trap "kill $pf 2>/dev/null || true" EXIT
+            for i in $(seq 1 30); do
+              if curl --fail --silent http://127.0.0.1:18080/actuator/health; then exit 0; fi
+              sleep 2
+            done
+            cat /tmp/library-port-forward.log
+            exit 1
+          '
+
+      - name: Install JMeter
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jmeter
+
+      - name: Run load test
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          test -s jmeter/load-test.jmx
+          jmeter -n -t jmeter/load-test.jmx \
+            -Jtarget.host="$EC2_HOST" -Jtarget.port=80 -Jtarget.protocol=http \
+            -Jthreads=25 -Jduration=120 \
+            -l jmeter-results.jtl -e -o jmeter-report
+
+      - name: Verify Prometheus error budget
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new "$EC2_USER@$EC2_HOST" '
+            set -euo pipefail
+            query="sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[2m]))"
+            for i in $(seq 1 12); do
+              value=$(curl --fail --silent --get --data-urlencode "query=$query" \
+                http://127.0.0.1:30900/api/v1/query |
+                python3 -c "import json,sys; d=json.load(sys.stdin); print(d['data']['result'][0]['value'][1] if d['data']['result'] else '0')")
+              if ! awk "BEGIN { exit !($value < 0.05) }"; then
+                echo "Prometheus 5xx rate is $value/s; threshold is 0.05/s"
+                exit 1
+              fi
+              sleep 10
+            done
+          '
+
+      - name: Upload JMeter report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-report-${{ github.sha }}
+          path: jmeter-report/
+          if-no-files-found: warn

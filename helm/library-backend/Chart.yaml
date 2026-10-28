@@ -1,0 +1,6 @@
+apiVersion: v2
+name: library-backend
+description: Cloud-based online library application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

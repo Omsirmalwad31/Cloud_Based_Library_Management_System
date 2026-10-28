@@ -55,6 +55,8 @@ library-project/
 - Containerization: Docker, Docker Compose
 - Orchestration: Kubernetes, Helm, Minikube
 - CI/CD: GitHub Actions, Terraform
+
+The repository's `.github/workflows/ci-cd.yml` runs three required quality gates: build/test/security validation, Docker image scan and ECR publishing, and Helm deployment with health, JMeter, and Prometheus validation. Pull requests run only Gate 1; deploys occur only on pushes to `main`. See the root [README.md](../readme.md) for the required AWS and SSH secrets.
 - Monitoring: Prometheus, Grafana, Spring Boot Actuator
 
 ---

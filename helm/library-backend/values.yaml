@@ -1,0 +1,40 @@
+backend:
+  replicaCount: 2
+  image:
+    repository: library-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  secretName: db-secret
+  jwtSecretName: jwt-secret
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: library-frontend
+    tag: local
+    pullPolicy: IfNotPresent
+  service:
+    port: 80
+
+serviceAccount:
+  create: false
+  name: ""
+
+imagePullSecrets: []
+
+ingress:
+  enabled: true
+  className: nginx
+  host: library.local
+
+monitoring:
+  enabled: true

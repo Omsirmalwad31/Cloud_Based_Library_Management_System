@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8081";
+const API_URL = (import.meta.env?.VITE_API_URL ?? "").replace(/\/$/, "");
 
 export async function api(path, { token, ...options } = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -12,7 +12,9 @@ export async function api(path, { token, ...options } = {}) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? body?.message ?? `Request failed (${response.status})`);
+    throw new Error(
+      body?.detail ?? body?.message ?? `Request failed (${response.status})`,
+    );
   }
 
   if (response.status === 204) return null;
