@@ -62,6 +62,24 @@ Requirements: Docker Desktop with Docker Compose v2, Git, and enough RAM for Jav
    docker compose down -v
    ```
 
+## AWS CI/CD credentials
+
+The publish job supports GitHub OIDC and repository-secret credentials. OIDC is recommended and requires no AWS access keys in GitHub:
+
+1. Create an IAM role whose trust policy trusts `token.actions.githubusercontent.com` for this repository.
+2. Restrict the subject claim to `repo:Omsirmalwad31/Cloud_Based_Library_Management_System:ref:refs/heads/main` (or use the repository subject `repo:Omsirmalwad31/Cloud_Based_Library_Management_System:*`).
+3. Grant the role permission for `sts:GetCallerIdentity`, ECR repository creation and push (`ecr:*` can be narrowed to the two repository ARNs), and read access to the workflow resources.
+4. Add the role ARN as the GitHub Actions secret `AWS_ROLE_ARN`.
+
+As a compatibility fallback, add both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Do not store both static credentials if OIDC is configured. The workflow derives the account ECR registry automatically and creates `library-backend` and `library-frontend` repositories when they do not exist.
+
+The workflow_dispatch entry lets the pipeline be tested from another branch. It still deploys only after AWS credentials and the deployment secrets below are configured:
+
+- `EC2_SSH_KEY`, `EC2_HOST`, `EC2_USER`
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`
+
+Never commit AWS credentials or private deployment keys.
+
 ## B. Terraform — inspect before creating AWS resources
 
 Terraform manages cloud resources, not the application code itself. The included EC2 `user_data` installs Docker only; deploying the application on the EC2 host is a separate step. Test Compose locally first.

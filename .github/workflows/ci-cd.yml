@@ -121,20 +121,56 @@ jobs:
   gate2-docker-ecr:
     name: Gate 2 - build, scan and publish
     needs: gate1-build-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     outputs:
       backend-uri: ${{ steps.image.outputs.backend-uri }}
       frontend-uri: ${{ steps.image.outputs.frontend-uri }}
+      ecr-registry: ${{ steps.registry.outputs.registry }}
       image-tag: ${{ steps.image.outputs.image-tag }}
     steps:
       - uses: actions/checkout@v5
 
-      - name: Configure AWS credentials
+      - name: Validate AWS credentials
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$AWS_ROLE_ARN" ] && { [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; }; then
+            echo "Configure GitHub secret AWS_ROLE_ARN for OIDC, or both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY." >&2
+            exit 1
+          fi
+          if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be configured together." >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials with OIDC
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials from repository secrets
+        if: ${{ secrets.AWS_ROLE_ARN == '' }}
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Prepare Amazon ECR
+        id: registry
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr describe-repositories --repository-names "$BACKEND_IMAGE" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "$BACKEND_IMAGE" >/dev/null
+          aws ecr describe-repositories --repository-names "$FRONTEND_IMAGE" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "$FRONTEND_IMAGE" >/dev/null
+          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -182,18 +218,14 @@ jobs:
         id: image
         shell: bash
         env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REGISTRY: ${{ steps.registry.outputs.registry }}
         run: |
           BACKEND_URI="$ECR_REGISTRY/$BACKEND_IMAGE"
           FRONTEND_URI="$ECR_REGISTRY/$FRONTEND_IMAGE"
           docker tag local/library-backend:${{ github.sha }} "$BACKEND_URI:${{ github.sha }}"
-          docker tag local/library-backend:${{ github.sha }} "$BACKEND_URI:latest"
           docker tag local/library-frontend:${{ github.sha }} "$FRONTEND_URI:${{ github.sha }}"
-          docker tag local/library-frontend:${{ github.sha }} "$FRONTEND_URI:latest"
           docker push "$BACKEND_URI:${{ github.sha }}"
-          docker push "$BACKEND_URI:latest"
           docker push "$FRONTEND_URI:${{ github.sha }}"
-          docker push "$FRONTEND_URI:latest"
           echo "backend-uri=$BACKEND_URI" >> "$GITHUB_OUTPUT"
           echo "frontend-uri=$FRONTEND_URI" >> "$GITHUB_OUTPUT"
           echo "image-tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
@@ -221,7 +253,7 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REGISTRY: ${{ needs.gate2-docker-ecr.outputs.ecr-registry }}
           DB_URL: ${{ secrets.DB_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
