@@ -1,11 +1,11 @@
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
 COPY src src
-RUN chmod +x mvnw && ./mvnw --batch-mode --no-transfer-progress package -DskipTests
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw && ./mvnw --batch-mode --no-transfer-progress package -DskipTests
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* && useradd --create-home --shell /bin/bash spring
 WORKDIR /app

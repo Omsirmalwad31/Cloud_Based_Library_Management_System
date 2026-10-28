@@ -102,7 +102,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/api/auth/login", "/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/actuator/prometheus")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/books/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/books/**").hasAnyRole("ADMIN", "LIBRARIAN")
                         .requestMatchers(HttpMethod.DELETE, "/api/books/**").hasRole("ADMIN")
